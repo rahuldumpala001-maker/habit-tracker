@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Habits Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root{
+      --bg:#732e11;
+      --card:#111a2e;
+      --muted:#bb8847;
+      --text:#e3e3e3;
+      --border:rgba(255,255,255,.08);
+      --good:#52d336;
+      --bad:#fd0303;
+      --warn:#fbbf24;
+      --accent:#fd4d00;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background:radial-gradient(1200px 600px at 20% -10%, rgba(96,165,250,.25), transparent 60%), radial-gradient(900px 500px at 90% 10%, rgba(54,211,153,.18), transparent 60%), var(--bg); color:var(--text);}
+    header{padding:24px 20px; max-width:1200px; margin:0 auto; display:flex; gap:12px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap;}
+    h1{margin:0;font-size:22px; letter-spacing:.2px}
+    .sub{margin:6px 0 0;color:var(--muted); font-size:13px; line-height:1.4}
+
+    .container{max-width:1200px; margin:0 auto; padding:0 20px 28px;}
+    .grid{display:grid; grid-template-columns: 1.1fr .9fr; gap:14px; align-items:start;}
+    @media (max-width: 980px){ .grid{grid-template-columns:1fr;} }
+
+    .card{background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)); border:1px solid var(--border); border-radius:16px; padding:16px; box-shadow:0 12px 30px rgba(0,0,0,.25);}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+    .spacer{flex:1}
+
+    button, input, select{border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,.04); color:var(--text); padding:10px 12px; font-size:13px; outline:none;}
+    input[type="date"]{padding:9px 10px}
+    button{cursor:pointer; transition:transform .05s ease, background .2s ease;}
+    button:hover{background:rgba(255,255,255,.07)}
+    button:active{transform:translateY(1px)}
+    .primary{background:rgba(96,165,250,.18); border-color:rgba(96,165,250,.35)}
+    .danger{background:rgba(251,113,133,.12); border-color:rgba(251,113,133,.25)}
+
+    .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:10px;}
+    @media (max-width: 980px){ .kpis{grid-template-columns:repeat(2,1fr);} }
+    .kpi{padding:12px; border:1px solid var(--border); border-radius:14px; background:rgba(255,255,255,.03)}
+    .kpi .label{font-size:12px; color:var(--muted)}
+    .kpi .value{font-size:20px; margin-top:6px; font-weight:700}
+
+    table{width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; border-radius:14px; border:1px solid var(--border);}
+    thead th{position:sticky; top:0; background:#af4719; backdrop-filter: blur(8px); z-index:1;}
+    th, td{padding:10px 10px; border-bottom:1px solid var(--border); font-size:13px;}
+    th{text-align:left; color:#dbe4ff; font-weight:600}
+    tbody tr:hover{background:rgba(255,255,255,.03)}
+    tbody tr:last-child td{border-bottom:none}
+
+    .pill{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid var(--border); background:rgba(255,255,255,.03); font-size:12px; color:var(--muted)}
+
+    .habit-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:10px;}
+    @media (max-width: 980px){ .habit-grid{grid-template-columns:repeat(2,1fr);} }
+
+    .habit{padding:12px; border-radius:14px; border:1px solid var(--border); background:rgba(255,255,255,.03)}
+    .habit label{display:flex; gap:10px; align-items:center; cursor:pointer; user-select:none}
+    .habit input[type="checkbox"]{width:18px; height:18px; accent-color: var(--accent)}
+    .habit .name{font-weight:600}
+    .habit .meta{margin-top:6px; color:var(--muted); font-size:12px; display:flex; justify-content:space-between; gap:10px}
+
+    .two{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;}
+    @media (max-width: 980px){ .two{grid-template-columns:1fr;} }
+
+    .muted{color:var(--muted)}
+    .tiny{font-size:12px}
+
+    .footer{margin-top:10px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap}
+    a{color:#bcd7ff; text-decoration:none}
+    a:hover{text-decoration:underline}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Daily Habits Dashboard</h1>
+      <div class="sub">Track checkmarks per day, visualize streaks and completion, and keep everything in your browser (localStorage).</div>
+    </div>
+    <div class="row">
+      <span class="pill" id="rangePill">Loading…</span>
+      <button class="primary" id="exportBtn">Export JSON</button>
+      <button id="importBtn">Import JSON</button>
+      <input id="importFile" type="file" accept="application/json" style="display:none" />
+      <button class="danger" id="resetBtn">Reset</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="grid">
+      <!-- LEFT: Daily entry + table -->
+      <div class="card">
+        <div class="row">
+          <div>
+            <div class="muted tiny">Selected date</div>
+            <div class="row" style="margin-top:6px; gap:8px;">
+              <input id="datePicker" type="date" />
+              <button id="todayBtn">Today</button>
+            </div>
+          </div>
+          <div class="spacer"></div>
+          <div>
+            <div class="muted tiny">Quick actions</div>
+            <div class="row" style="margin-top:6px;">
+              <button id="allDoneBtn">Mark all ✓</button>
+              <button id="clearDayBtn">Clear day</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="habit-grid" id="habitGrid"></div>
+
+        <div class="two">
+          <div class="habit">
+            <div class="row" style="justify-content:space-between;">
+              <div>
+                <div class="name">Water intake</div>
+                <div class="muted tiny">Liters</div>
+              </div>
+              <input id="waterInput" type="number" min="0" step="0.1" style="width:140px;" placeholder="e.g. 2.5" />
+            </div>
+          </div>
+          <div class="habit">
+            <div class="row" style="justify-content:space-between;">
+              <div>
+                <div class="name">Sleep</div>
+                <div class="muted tiny">Hours</div>
+              </div>
+              <input id="sleepInput" type="number" min="0" step="0.1" style="width:140px;" placeholder="e.g. 7.5" />
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <div class="muted tiny">Tip: Use <b>Export JSON</b> to back up your data or move to another device.</div>
+          <div class="muted tiny">Built for January 2026 by default — you can switch months anytime.</div>
+        </div>
+
+        <hr style="border:none; border-top:1px solid var(--border); margin:14px 0;" />
+
+        <div class="row">
+          <h2 style="margin:0; font-size:16px;">Daily log</h2>
+          <div class="spacer"></div>
+          <select id="monthSelect"></select>
+        </div>
+        <div style="margin-top:10px; max-height:420px; overflow:auto; border-radius:14px;">
+          <table>
+            <thead>
+              <tr id="tableHead"></tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RIGHT: KPIs + charts -->
+      <div class="card">
+        <div class="row">
+          <h2 style="margin:0; font-size:16px;">Progress</h2>
+          <div class="spacer"></div>
+          <span class="pill" id="streakPill">Streak: 0</span>
+        </div>
+
+        <div class="kpis" style="margin-top:10px;">
+          <div class="kpi">
+            <div class="label">Days tracked</div>
+            <div class="value" id="kpiDays">0</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Avg completion</div>
+            <div class="value" id="kpiAvg">0%</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Best habit</div>
+            <div class="value" id="kpiBest">—</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Water avg</div>
+            <div class="value" id="kpiWater">0.0L</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <canvas id="habitBar" height="220"></canvas>
+        </div>
+
+        <div style="margin-top:12px;">
+          <canvas id="dailyLine" height="220"></canvas>
+        </div>
+
+        <div class="muted tiny" style="margin-top:10px; line-height:1.4;">
+          Charts update as you check habits. Data stays on this device (localStorage).
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  /********************
+   * CONFIG
+   ********************/
+  const HABITS = [
+    { key: 'wake', label: 'Wake Up Early' },
+    { key: 'workout', label: 'Workout' },
+    { key: 'meditate', label: 'Meditation' },
+    { key: 'code', label: 'Work' },
+    { key: 'read', label: 'Reading' },
+    { key: 'eat', label: 'Healthy Eating' },
+  ];
+
+  // Storage key
+  const STORAGE_KEY = 'habits_dashboard_v1';
+
+  /********************
+   * STATE
+   ********************/
+  const state = {
+    // month in YYYY-MM format
+    month: '2026-01',
+    // selected date in YYYY-MM-DD
+    selectedDate: null,
+    data: {
+      // by date: { wake:true, workout:false, ..., water:2.5, sleep:7.0 }
+      byDate: {}
+    }
+  };
+
+  /********************
+   * HELPERS
+   ********************/
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const todayISO = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  };
+  const monthFromISO = (iso) => iso.slice(0,7);
+  const daysInMonth = (yyyyMm) => {
+    const [y,m] = yyyyMm.split('-').map(Number);
+    return new Date(y, m, 0).getDate();
+  };
+  const isoForDay = (yyyyMm, day) => `${yyyyMm}-${pad2(day)}`;
+
+  function load(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        const parsed = JSON.parse(raw);
+        if(parsed && parsed.data && parsed.data.byDate) state.data = parsed.data;
+        if(parsed && parsed.month) state.month = parsed.month;
+      }
+    }catch(e){
+      console.warn('Failed to load', e);
+    }
+  }
+
+  function save(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ month: state.month, data: state.data }));
+  }
+
+  function ensureDay(dateISO){
+    if(!state.data.byDate[dateISO]){
+      state.data.byDate[dateISO] = { water: null, sleep: null };
+      for(const h of HABITS) state.data.byDate[dateISO][h.key] = false;
+    }
+    return state.data.byDate[dateISO];
+  }
+
+  function setMonth(yyyyMm){
+    state.month = yyyyMm;
+    // Keep selected date within month
+    const candidate = `${yyyyMm}-01`;
+    state.selectedDate = candidate;
+    save();
+  }
+
+  function completionForDay(dateISO){
+    const day = state.data.byDate[dateISO];
+    if(!day) return null;
+    const total = HABITS.length;
+    const done = HABITS.reduce((acc,h)=> acc + (day[h.key] ? 1 : 0), 0);
+    return done / total;
+  }
+
+  function trackedDaysInMonth(yyyyMm){
+    const dim = daysInMonth(yyyyMm);
+    const dates = [];
+    for(let d=1; d<=dim; d++){
+      const iso = isoForDay(yyyyMm, d);
+      if(state.data.byDate[iso]) dates.push(iso);
+    }
+    return dates;
+  }
+
+  function currentStreak(yyyyMm){
+    // streak of consecutive days ending at today (if today in month) else ending at last day of month
+    const dim = daysInMonth(yyyyMm);
+    const end = (monthFromISO(todayISO()) === yyyyMm) ? todayISO() : isoForDay(yyyyMm, dim);
+
+    let streak = 0;
+    let cursor = new Date(end + 'T00:00:00');
+
+    while(true){
+      const iso = `${cursor.getFullYear()}-${pad2(cursor.getMonth()+1)}-${pad2(cursor.getDate())}`;
+      if(monthFromISO(iso) !== yyyyMm) break;
+      const comp = completionForDay(iso);
+      if(comp === null) break; // not tracked
+      if(comp >= 0.5){
+        streak++;
+        cursor.setDate(cursor.getDate()-1);
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
+  /********************
+   * UI BUILD
+   ********************/
+  const el = (id) => document.getElementById(id);
+
+  // Month options (current month +/- 6 months)
+  function buildMonthOptions(){
+    const select = el('monthSelect');
+    select.innerHTML = '';
+
+    const now = new Date();
+    const base = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const months = [];
+    // Include a range, plus Jan 2026 explicitly
+    const jan2026 = '2026-01';
+    months.push(jan2026);
+
+    for(let i=-6; i<=6; i++){
+      const d = new Date(base);
+      d.setMonth(d.getMonth()+i);
+      const yyyyMm = `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
+      if(!months.includes(yyyyMm)) months.push(yyyyMm);
+    }
+
+    months.sort();
+
+    for(const m of months){
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = new Date(m + '-01T00:00:00').toLocaleString(undefined, { month: 'long', year: 'numeric' });
+      select.appendChild(opt);
+    }
+
+    select.value = state.month;
+    select.addEventListener('change', () => {
+      setMonth(select.value);
+      syncUI();
+    });
+  }
+
+  function buildHabitGrid(){
+    const grid = el('habitGrid');
+    grid.innerHTML = '';
+
+    for(const h of HABITS){
+      const card = document.createElement('div');
+      card.className = 'habit';
+
+      const id = `chk_${h.key}`;
+      card.innerHTML = `
+        <label for="${id}">
+          <input id="${id}" type="checkbox" />
+          <div>
+            <div class="name">${h.label}</div>
+            <div class="meta"><span class="muted">Today</span><span id="meta_${h.key}">0%</span></div>
+          </div>
+        </label>
+      `;
+
+      grid.appendChild(card);
+
+      // Listener
+      card.querySelector('input').addEventListener('change', (e) => {
+        const day = ensureDay(state.selectedDate);
+        day[h.key] = e.target.checked;
+        save();
+        syncUI(false);
+      });
+    }
+  }
+
+  function buildTable(){
+    const head = el('tableHead');
+    head.innerHTML = '';
+
+    const cols = ['Date', ...HABITS.map(h=>h.label), 'Water (L)', 'Sleep (h)', 'Completion'];
+    for(const c of cols){
+      const th = document.createElement('th');
+      th.textContent = c;
+      head.appendChild(th);
+    }
+  }
+
+  /********************
+   * CHARTS
+   ********************/
+  let habitBarChart = null;
+  let dailyLineChart = null;
+
+  function initCharts(){
+    const barCtx = el('habitBar');
+    const lineCtx = el('dailyLine');
+
+    habitBarChart = new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: HABITS.map(h=>h.label),
+        datasets: [{
+          label: 'Days completed (✓)',
+          data: HABITS.map(()=>0),
+          borderWidth: 1,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: true }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision:0 } }
+        }
+      }
+    });
+
+    dailyLineChart = new Chart(lineCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Daily completion %',
+          data: [],
+          tension: 0.25,
+          fill: false,
+          pointRadius: 3,
+          borderWidth: 2,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => `${Math.round(ctx.parsed.y*100)}%` } }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 1,
+            ticks: {
+              callback: (v)=> `${Math.round(v*100)}%`
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function updateCharts(){
+    // Habit bar: count of days in month habit == true
+    const dim = daysInMonth(state.month);
+    const counts = HABITS.map(()=>0);
+
+    for(let d=1; d<=dim; d++){
+      const iso = isoForDay(state.month, d);
+      const day = state.data.byDate[iso];
+      if(!day) continue;
+      HABITS.forEach((h, idx) => { if(day[h.key]) counts[idx]++; });
+    }
+
+    habitBarChart.data.datasets[0].data = counts;
+    habitBarChart.update();
+
+    // Daily line: completion across days (nulls skipped)
+    const labels = [];
+    const series = [];
+    for(let d=1; d<=dim; d++){
+      const iso = isoForDay(state.month, d);
+      const comp = completionForDay(iso);
+      labels.push(String(d));
+      series.push(comp === null ? null : comp);
+    }
+
+    dailyLineChart.data.labels = labels;
+    dailyLineChart.data.datasets[0].data = series;
+    dailyLineChart.update();
+  }
+
+  /********************
+   * KPI + TABLE RENDER
+   ********************/
+  function renderTable(){
+    const body = el('tableBody');
+    body.innerHTML = '';
+    const dim = daysInMonth(state.month);
+
+    for(let d=1; d<=dim; d++){
+      const iso = isoForDay(state.month, d);
+      const day = state.data.byDate[iso];
+      const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+
+      const dateTd = document.createElement('td');
+      dateTd.textContent = iso;
+      tr.appendChild(dateTd);
+
+      HABITS.forEach((h) => {
+        const td = document.createElement('td');
+        td.textContent = day ? (day[h.key] ? '✓' : '✗') : '';
+        td.style.color = day ? (day[h.key] ? 'var(--good)' : 'var(--bad)') : 'inherit';
+        tr.appendChild(td);
+      });
+
+      const w = document.createElement('td');
+      w.textContent = day && day.water != null ? Number(day.water).toFixed(1) : '';
+      tr.appendChild(w);
+
+      const s = document.createElement('td');
+      s.textContent = day && day.sleep != null ? Number(day.sleep).toFixed(1) : '';
+      tr.appendChild(s);
+
+      const c = document.createElement('td');
+      const comp = completionForDay(iso);
+      c.textContent = comp == null ? '' : `${Math.round(comp*100)}%`;
+      tr.appendChild(c);
+
+      tr.addEventListener('click', () => {
+        state.selectedDate = iso;
+        syncUI();
+      });
+
+      body.appendChild(tr);
+    }
+  }
+
+  function renderKPIs(){
+    const dim = daysInMonth(state.month);
+    const tracked = trackedDaysInMonth(state.month);
+
+    // Days tracked
+    el('kpiDays').textContent = tracked.length;
+
+    // Avg completion across tracked days
+    let sum = 0;
+    for(const iso of tracked){
+      sum += completionForDay(iso) ?? 0;
+    }
+    const avg = tracked.length ? (sum / tracked.length) : 0;
+    el('kpiAvg').textContent = `${Math.round(avg*100)}%`;
+
+    // Best habit
+    const counts = HABITS.map(()=>0);
+    for(let d=1; d<=dim; d++){
+      const iso = isoForDay(state.month, d);
+      const day = state.data.byDate[iso];
+      if(!day) continue;
+      HABITS.forEach((h, idx) => { if(day[h.key]) counts[idx]++; });
+    }
+    const max = Math.max(...counts);
+    const bestIdx = max > 0 ? counts.indexOf(max) : -1;
+    el('kpiBest').textContent = bestIdx >= 0 ? HABITS[bestIdx].label : '—';
+
+    // Water avg (across tracked days where entered)
+    const waterVals = tracked
+      .map(iso => state.data.byDate[iso]?.water)
+      .filter(v => v != null && v !== '');
+    const waterAvg = waterVals.length ? (waterVals.reduce((a,b)=>a+Number(b),0) / waterVals.length) : 0;
+    el('kpiWater').textContent = `${waterAvg.toFixed(1)}L`;
+
+    // Streak
+    const streak = currentStreak(state.month);
+    el('streakPill').textContent = `Streak: ${streak}`;
+
+    // Range pill
+    const monthName = new Date(state.month + '-01T00:00:00').toLocaleString(undefined, { month: 'long', year: 'numeric' });
+    el('rangePill').textContent = monthName;
+  }
+
+  function renderSelectedDay(){
+    const dp = el('datePicker');
+    dp.value = state.selectedDate;
+
+    const day = ensureDay(state.selectedDate);
+
+    // Checkboxes
+    for(const h of HABITS){
+      const chk = el(`chk_${h.key}`);
+      chk.checked = !!day[h.key];
+    }
+
+    // Inputs
+    const water = el('waterInput');
+    const sleep = el('sleepInput');
+    water.value = (day.water == null ? '' : day.water);
+    sleep.value = (day.sleep == null ? '' : day.sleep);
+
+    // Habit meta: percent completed in month for each habit
+    const dim = daysInMonth(state.month);
+    const counts = HABITS.map(()=>0);
+    let tracked = 0;
+
+    for(let d=1; d<=dim; d++){
+      const iso = isoForDay(state.month, d);
+      const row = state.data.byDate[iso];
+      if(!row) continue;
+      tracked++;
+      HABITS.forEach((h, idx)=>{ if(row[h.key]) counts[idx]++; });
+    }
+
+    HABITS.forEach((h, idx) => {
+      const pct = tracked ? Math.round((counts[idx]/tracked)*100) : 0;
+      const meta = document.getElementById(`meta_${h.key}`);
+      meta.textContent = `${pct}%`;
+    });
+  }
+
+  /********************
+   * SYNC
+   ********************/
+  function syncUI(updateDatePickerMonth = true){
+    // If selectedDate not set, default
+    if(!state.selectedDate) state.selectedDate = `${state.month}-01`;
+
+    // Keep selected date within selected month
+    if(monthFromISO(state.selectedDate) !== state.month){
+      state.selectedDate = `${state.month}-01`;
+    }
+
+    // date picker constraints
+    const dp = el('datePicker');
+    const dim = daysInMonth(state.month);
+    dp.min = `${state.month}-01`;
+    dp.max = `${state.month}-${pad2(dim)}`;
+
+    renderSelectedDay();
+    renderTable();
+    renderKPIs();
+    updateCharts();
+
+    // Update month select
+    el('monthSelect').value = state.month;
+
+    save();
+  }
+
+  /********************
+   * EVENTS
+   ********************/
+  function wireEvents(){
+    el('datePicker').addEventListener('change', (e) => {
+      state.selectedDate = e.target.value;
+      // If user picked a date outside month (shouldn't happen due to min/max), still guard.
+      state.month = monthFromISO(state.selectedDate);
+      syncUI();
+    });
+
+    el('todayBtn').addEventListener('click', () => {
+      const t = todayISO();
+      state.month = monthFromISO(t);
+      state.selectedDate = t;
+      syncUI();
+    });
+
+    el('allDoneBtn').addEventListener('click', () => {
+      const day = ensureDay(state.selectedDate);
+      for(const h of HABITS) day[h.key] = true;
+      save();
+      syncUI(false);
+    });
+
+    el('clearDayBtn').addEventListener('click', () => {
+      delete state.data.byDate[state.selectedDate];
+      save();
+      syncUI(false);
+    });
+
+    el('waterInput').addEventListener('input', (e) => {
+      const day = ensureDay(state.selectedDate);
+      const v = e.target.value;
+      day.water = v === '' ? null : Number(v);
+      save();
+      syncUI(false);
+    });
+
+    el('sleepInput').addEventListener('input', (e) => {
+      const day = ensureDay(state.selectedDate);
+      const v = e.target.value;
+      day.sleep = v === '' ? null : Number(v);
+      save();
+      syncUI(false);
+    });
+
+    // Export / Import
+    el('exportBtn').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify({ month: state.month, data: state.data }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `habits-${state.month}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    el('importBtn').addEventListener('click', () => el('importFile').click());
+
+    el('importFile').addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if(!file) return;
+      const text = await file.text();
+      try{
+        const parsed = JSON.parse(text);
+        if(parsed?.data?.byDate){
+          state.data = parsed.data;
+          if(parsed.month) state.month = parsed.month;
+          state.selectedDate = `${state.month}-01`;
+          save();
+          syncUI();
+        } else {
+          alert('Invalid file. Expected { month, data: { byDate } }');
+        }
+      }catch(err){
+        alert('Could not import JSON.');
+      }
+      e.target.value = '';
+    });
+
+    el('resetBtn').addEventListener('click', () => {
+      if(!confirm('Reset all data? This cannot be undone.')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      state.data = { byDate: {} };
+      state.month = '2026-01';
+      state.selectedDate = `${state.month}-01`;
+      syncUI();
+    });
+  }
+
+  /********************
+   * INIT
+   ********************/
+  function init(){
+    load();
+    // Default selected date
+    const t = todayISO();
+    state.selectedDate = (monthFromISO(t) === state.month) ? t : `${state.month}-01`;
+
+    buildMonthOptions();
+    buildHabitGrid();
+    buildTable();
+    initCharts();
+    wireEvents();
+    syncUI();
+  }
+
+  init();
+</script>
+</body>
+</html>
